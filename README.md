@@ -12,6 +12,12 @@ Every factor contributing to the final score is retained, allowing a security an
 
 ## Demo
 
+## Demo Video
+
+A short silent walkthrough showing the AADRS system running, including the live dashboard, authentication event scoring, alert prioritisation and investigation workflow.
+
+[▶ Watch the AADRS Demo on YouTube](https://youtu.be/dde5IiLehew)
+
 ### Security Monitoring Dashboard
 
 ![AADRS Dashboard](screenshots/dashboard.png)
