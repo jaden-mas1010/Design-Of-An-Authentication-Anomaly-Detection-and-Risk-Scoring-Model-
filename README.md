@@ -486,6 +486,53 @@ The warning related to zero-variance features in an Isolation Forest test and di
 
 ---
 
+## Research Background
+
+AADRS was developed as part of an MSc Information and Network Security research project focused on authentication anomaly detection and explainable risk scoring.
+
+The research examined:
+
+- Credential-based authentication threats
+- Behavioural baselines and UEBA
+- Rule-based authentication detection
+- Risk-based authentication
+- Isolation Forest anomaly detection
+- Explainability in security analytics
+- Authentication event correlation and SIEM integration
+
+The project followed a Design Science Research approach, where the problem was studied, a prototype was designed and implemented, and the system was then evaluated using controlled tests and the LANL authentication dataset.
+
+## Research Question
+
+How can suspicious authentication activity be prioritised using an explainable risk-scoring approach while still providing useful context to a security analyst?
+
+## Evaluation
+
+AADRS was evaluated using:
+
+- Automated unit testing
+- Boundary testing
+- Controlled authentication scenarios
+- Rule-based vs Isolation Forest sanity comparison
+- Large-scale LANL authentication dataset evaluation
+
+The LANL evaluation processed over 1 billion authentication events.
+
+The results also highlighted limitations in the current rule weights and thresholds, particularly around false positives and the difficulty of transferring assumptions from synthetic authentication behaviour to a large real-world dataset.
+
+## Research Limitations
+
+The current implementation is a research prototype.
+
+Key limitations include:
+
+- Rule weights and thresholds are provisional
+- The LANL dataset does not provide all fields used by AADRS, such as MFA and geographical context
+- Device information had to be approximated from available LANL fields
+- The Isolation Forest model was trained on synthetic normal authentication behaviour and used only as a comparison
+- The system has not been evaluated as a production enterprise deployment
+
+
 ## Boundary Testing
 
 Boundary tests were used to verify that detection rules behaved correctly around their thresholds.
