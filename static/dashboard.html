@@ -1,0 +1,986 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>AADRS - Authentication Risk Monitor</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --panel: #171a23;
+    --panel-2: #1d212c;
+    --border: #2a2e3a;
+    --text: #e6e8ee;
+    --muted: #8891a5;
+    --low: #3fb950;
+    --medium: #d29922;
+    --high: #db6d28;
+    --critical: #f85149;
+    --accent: #58a6ff;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, Segoe UI, Roboto, sans-serif; background: var(--bg); color: var(--text); }
+  header {
+    padding: 16px 28px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;
+  }
+  header h1 { font-size: 18px; margin: 0; font-weight: 600; }
+  header .status { font-size: 13px; color: var(--muted); }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+  .dot.connected { background: var(--low); }
+  .dot.disconnected { background: var(--critical); }
+
+  .controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .toggle-group { display: flex; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 3px; }
+  .toggle-btn { background: none; border: none; color: var(--muted); font-size: 12px; font-weight: 600; padding: 6px 14px; border-radius: 6px; cursor: pointer; }
+  .toggle-btn.active { background: var(--accent); color: #0b1320; }
+
+  .stats { display: flex; gap: 12px; padding: 14px 28px; border-bottom: 1px solid var(--border); }
+  .stat-card { flex: 1; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; cursor: pointer; }
+  .stat-card.active-filter { border-color: var(--accent); }
+  .stat-card .value { font-size: 22px; font-weight: 700; }
+  .stat-card .label { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+  main { padding: 20px 28px; }
+
+  /* ===== SIMPLE VIEW: widget dashboard ===== */
+  #simple-view { display: grid; grid-template-columns: 1.6fr 1fr; gap: 20px; }
+  .widget {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 18px 20px; margin-bottom: 20px;
+  }
+  .widget h3 {
+    margin: 0 0 14px 0; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px;
+    color: var(--muted); font-weight: 700; display: flex; align-items: center; justify-content: space-between;
+  }
+  .widget h3 .count-pill {
+    background: var(--panel-2); color: var(--text); font-size: 11px; padding: 2px 9px;
+    border-radius: 10px; font-weight: 700;
+  }
+
+  .all-clear { text-align: center; padding: 30px 10px; color: var(--muted); }
+  .all-clear .big-check { font-size: 32px; color: var(--low); margin-bottom: 8px; }
+
+  .attn-card {
+    background: var(--panel-2); border-left: 3px solid var(--critical); border-radius: 8px;
+    padding: 14px 16px; margin-bottom: 12px; cursor: pointer;
+  }
+  .attn-card.tier-HIGH { border-left-color: var(--high); }
+  .attn-card.tier-MEDIUM { border-left-color: var(--medium); }
+  .attn-card-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .attn-card-user { font-weight: 700; font-size: 14px; }
+  .attn-card-meta { color: var(--muted); font-size: 11px; }
+  .attn-card-summary { font-size: 13px; line-height: 1.5; margin-bottom: 10px; }
+  .attn-card-action {
+    background: rgba(88,166,255,0.1); border: 1px solid rgba(88,166,255,0.3);
+    border-radius: 6px; padding: 8px 12px; font-size: 12.5px; display: flex; gap: 8px; align-items: flex-start;
+  }
+  .attn-card-action .icon { color: var(--accent); font-weight: 700; flex-shrink: 0; }
+  .attn-card-detail { border-top: 1px solid var(--border); padding-top: 12px; }
+  .view-all-link {
+    display: block; text-align: center; color: var(--accent); font-size: 12px;
+    font-weight: 600; cursor: pointer; padding-top: 4px;
+  }
+  .view-all-link:hover { text-decoration: underline; }
+
+  .tier-badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-weight: 700; font-size: 11px; letter-spacing: 0.5px; }
+  .tier-LOW { background: rgba(63,185,80,0.15); color: var(--low); }
+  .tier-MEDIUM { background: rgba(210,153,34,0.15); color: var(--medium); }
+  .tier-HIGH { background: rgba(219,109,40,0.15); color: var(--high); }
+  .tier-CRITICAL { background: rgba(248,81,73,0.18); color: var(--critical); }
+
+  .breakdown-legend { display: flex; flex-direction: column; gap: 8px; font-size: 12px; color: var(--muted); }
+  .breakdown-legend span { display: flex; align-items: center; gap: 6px; }
+  .legend-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .legend-count { margin-left: auto; font-weight: 700; color: var(--text); }
+
+  .user-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 13px;
+  }
+  .user-row:last-child { border-bottom: none; }
+  .user-row-name { color: var(--accent); cursor: pointer; font-weight: 600; }
+  .user-row-name:hover { text-decoration: underline; }
+  .user-row-badges { display: flex; gap: 6px; }
+  .mini-badge {
+    font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 8px; background: var(--panel-2); color: var(--muted);
+  }
+
+  .action-freq-item {
+    display: flex; justify-content: space-between; align-items: center; padding: 8px 0;
+    border-bottom: 1px solid var(--border); font-size: 12.5px; gap: 10px;
+  }
+  .action-freq-item:last-child { border-bottom: none; }
+  .action-freq-count {
+    background: var(--panel-2); color: var(--text); font-size: 11px; font-weight: 700;
+    padding: 2px 8px; border-radius: 8px; flex-shrink: 0;
+  }
+
+  /* ===== TECHNICAL VIEW: live investigation table ===== */
+  #technical-view { display: none; }
+  .investigate-bar {
+    display: flex; gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--border);
+    align-items: center; flex-wrap: wrap; margin-bottom: 16px;
+  }
+  .search-input {
+    flex: 1; min-width: 220px; background: var(--panel); border: 1px solid var(--border);
+    color: var(--text); padding: 8px 12px; border-radius: 8px; font-size: 13px;
+  }
+  .search-input:focus { outline: none; border-color: var(--accent); }
+  .filter-chip {
+    background: var(--panel); border: 1px solid var(--border); color: var(--muted);
+    padding: 6px 12px; border-radius: 16px; font-size: 12px; cursor: pointer; font-weight: 600;
+  }
+  .filter-chip.active { background: var(--accent); color: #0b1320; border-color: var(--accent); }
+  .clear-filters { background: none; border: 1px solid var(--border); color: var(--muted); padding: 6px 12px; border-radius: 8px; font-size: 12px; cursor: pointer; }
+  .clear-filters:hover { color: var(--text); }
+  .result-count { font-size: 12px; color: var(--muted); white-space: nowrap; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; color: var(--muted); font-weight: 500; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+  th.sortable { cursor: pointer; user-select: none; }
+  th.sortable:hover { color: var(--text); }
+  td { padding: 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr.event-row { cursor: pointer; }
+  tr.event-row:hover { background: rgba(255,255,255,0.03); }
+  .user-link { color: var(--accent); cursor: pointer; text-decoration: none; font-weight: 600; }
+  .user-link:hover { text-decoration: underline; }
+  .priority-badge {
+    display: inline-block; min-width: 22px; text-align: center; padding: 2px 6px; border-radius: 6px;
+    font-size: 11px; font-weight: 700; background: var(--panel-2); border: 1px solid var(--border); color: var(--muted);
+  }
+  .priority-badge.p1 { background: rgba(248,81,73,0.18); color: var(--critical); border-color: transparent; }
+  .repeat-badge {
+    display: inline-block; font-size: 10px; font-weight: 700; color: var(--muted); background: var(--panel-2);
+    border: 1px solid var(--border); border-radius: 10px; padding: 1px 7px; margin-left: 6px;
+  }
+  .score-bar-bg { width: 60px; height: 6px; background: var(--border); border-radius: 3px; display: inline-block; margin-right: 8px; vertical-align: middle; }
+  .score-bar-fill { height: 100%; border-radius: 3px; display: block; }
+  .summary-cell { color: var(--text); font-size: 12px; line-height: 1.5; max-width: 340px; }
+  .source-tag { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-left: 6px; }
+  .empty-state { text-align: center; padding: 60px 0; color: var(--muted); }
+  tr.detail-row td { background: var(--panel); padding: 0; border-bottom: 1px solid var(--border); }
+  .detail-panel { padding: 18px 24px; }
+  .detail-section { margin-bottom: 16px; }
+  .detail-section h4 { margin: 0 0 8px 0; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); font-weight: 600; }
+  .factor-item { padding: 8px 10px; background: var(--panel-2); border-radius: 6px; margin-bottom: 6px; font-size: 13px; display: flex; justify-content: space-between; gap: 12px; }
+  .factor-item .rule-id { font-family: monospace; font-size: 11px; color: var(--muted); background: var(--border); padding: 1px 6px; border-radius: 4px; flex-shrink: 0; }
+  .action-list { list-style: none; padding: 0; margin: 0; counter-reset: action; }
+  .action-list li { counter-increment: action; padding: 8px 10px 8px 34px; position: relative; background: var(--panel-2); border-radius: 6px; margin-bottom: 6px; font-size: 13px; }
+  .action-list li::before { content: counter(action); position: absolute; left: 10px; top: 8px; width: 16px; height: 16px; border-radius: 50%; background: var(--accent); color: #0b1320; font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+  .mitre-chip { display: inline-block; font-family: monospace; font-size: 11px; background: rgba(88,166,255,0.15); color: var(--accent); padding: 2px 8px; border-radius: 10px; margin-right: 6px; }
+
+  /* ===== INVESTIGATIONS VIEW ===== */
+  #investigations-view { display: none; }
+
+  .investigation-summary {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+
+  .mini-summary {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .mini-summary strong {
+    color: var(--text);
+    font-size: 14px;
+    margin-right: 4px;
+  }
+
+  .case-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+    gap: 16px;
+  }
+
+  .case-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 20px;
+  }
+
+  .case-card.case-CRITICAL { border-left: 4px solid var(--critical); }
+  .case-card.case-HIGH { border-left: 4px solid var(--high); }
+  .case-card.case-MEDIUM { border-left: 4px solid var(--medium); }
+  .case-card.case-LOW { border-left: 4px solid var(--low); }
+
+  .case-top {
+    display: flex;
+    justify-content: space-between;
+    gap: 14px;
+    align-items: flex-start;
+  }
+
+  .case-id {
+    font-family: monospace;
+    font-size: 11px;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+
+  .case-title {
+    font-size: 15px;
+    font-weight: 700;
+  }
+
+  .case-score {
+    text-align: right;
+    flex-shrink: 0;
+  }
+
+  .case-score .value {
+    font-size: 24px;
+    font-weight: 800;
+  }
+
+  .case-score .label {
+    color: var(--muted);
+    font-size: 10px;
+    text-transform: uppercase;
+  }
+
+  .case-meta {
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.6;
+    margin: 10px 0 14px;
+  }
+
+  .case-section {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+  }
+
+  .case-section h4 {
+    margin: 0 0 8px;
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: .5px;
+  }
+
+  .signal-chip {
+    display: inline-block;
+    margin: 0 6px 6px 0;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 10px;
+    font-family: monospace;
+    color: var(--accent);
+    background: rgba(88,166,255,.12);
+    border: 1px solid rgba(88,166,255,.25);
+  }
+
+  .case-evidence {
+    background: var(--panel-2);
+    border-radius: 6px;
+    padding: 10px 12px;
+    font-family: monospace;
+    font-size: 11px;
+    line-height: 1.6;
+    color: var(--muted);
+    max-height: 180px;
+    overflow: auto;
+  }
+
+  .case-action-list {
+    margin: 0;
+    padding-left: 18px;
+    font-size: 12.5px;
+    line-height: 1.7;
+  }
+
+</style>
+</head>
+<body>
+
+<header>
+  <h1>AADRS &mdash; Authentication Risk Monitor</h1>
+  <div class="controls">
+    <div class="toggle-group" id="audience-toggle">
+      <button class="toggle-btn active" data-mode="simple">Simple view</button>
+      <button class="toggle-btn" data-mode="technical">Technical view</button>
+      <button class="toggle-btn" data-mode="investigations">Investigations</button>
+    </div>
+    <div class="status"><span id="status-dot" class="dot disconnected"></span><span id="status-text">Connecting...</span></div>
+  </div>
+</header>
+
+<div class="stats">
+  <div class="stat-card" data-tier-filter="ALL"><div class="value" id="stat-total">0</div><div class="label">Events scored</div></div>
+  <div class="stat-card" data-tier-filter="LOW"><div class="value" id="stat-low" style="color:var(--low)">0</div><div class="label">LOW</div></div>
+  <div class="stat-card" data-tier-filter="MEDIUM"><div class="value" id="stat-medium" style="color:var(--medium)">0</div><div class="label">MEDIUM</div></div>
+  <div class="stat-card" data-tier-filter="HIGH"><div class="value" id="stat-high" style="color:var(--high)">0</div><div class="label">HIGH</div></div>
+  <div class="stat-card" data-tier-filter="CRITICAL"><div class="value" id="stat-critical" style="color:var(--critical)">0</div><div class="label">CRITICAL</div></div>
+</div>
+
+<main>
+
+  <!-- ===== SIMPLE VIEW ===== -->
+  <div id="simple-view">
+    <div>
+      <div class="widget">
+        <h3>Needs immediate attention <span class="count-pill" id="attn-count">0</span></h3>
+        <div id="attn-list"></div>
+      </div>
+      <div class="widget">
+        <h3>Ask AI about this dashboard</h3>
+        <div id="ask-answer" style="font-size:13px; line-height:1.6; margin-bottom:12px; color:var(--muted);">
+          Ask a question about what's currently shown &mdash; e.g. "which user has the most CRITICAL alerts?" or "summarize the biggest risks right now."
+        </div>
+        <div style="display:flex; gap:8px;">
+          <input type="text" id="ask-input" class="search-input" placeholder="Ask a question...">
+          <button id="ask-submit" class="clear-filters" style="white-space:nowrap; cursor:pointer;">Ask</button>
+        </div>
+      </div>
+      <div class="widget">
+        <h3>Most common recommended actions right now</h3>
+        <div id="action-freq-list"><div class="all-clear" style="padding:16px 0;">No data yet.</div></div>
+      </div>
+    </div>
+    <div>
+      <div class="widget">
+        <h3>Risk breakdown</h3>
+        <div style="display:flex; align-items:center; gap:20px;">
+          <div id="pie-chart" style="width:120px; height:120px; border-radius:50%; flex-shrink:0;"></div>
+          <div class="breakdown-legend" id="breakdown-legend"></div>
+        </div>
+      </div>
+      <div class="widget">
+        <h3>Users to watch <span class="count-pill" id="watch-count">0</span></h3>
+        <div id="watch-list"><div class="all-clear" style="padding:16px 0;">No repeat flags yet.</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== TECHNICAL VIEW ===== -->
+  <div id="technical-view">
+    <div class="investigate-bar">
+      <input type="text" id="search-box" class="search-input" placeholder="Search by user, country, IP, or summary text...">
+      <button class="filter-chip active" data-mitre-filter="ALL">All MITRE</button>
+      <button class="filter-chip" data-mitre-filter="ANY">Mapped only</button>
+      <button class="clear-filters" id="clear-filters">Clear filters</button>
+      <span class="result-count" id="result-count"></span>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th style="width:40px">#</th>
+          <th style="width:90px">Time</th>
+          <th style="width:110px">User</th>
+          <th style="width:70px">Country</th>
+          <th style="width:150px" class="sortable" id="th-score">Score &#8597;</th>
+          <th>Summary</th>
+        </tr>
+      </thead>
+      <tbody id="feed-body"></tbody>
+    </table>
+    <div id="empty-state" class="empty-state">Waiting for events&hellip; run <code>python3 event_simulator.py</code> to generate live traffic.</div>
+  </div>
+
+  <!-- ===== INVESTIGATIONS VIEW ===== -->
+  <div id="investigations-view">
+    <div class="investigation-summary">
+      <div class="mini-summary"><strong id="case-total">0</strong> investigations</div>
+      <div class="mini-summary"><strong id="case-critical">0</strong> critical</div>
+      <div class="mini-summary"><strong id="case-high">0</strong> high</div>
+    </div>
+
+    <div id="case-list" class="case-grid">
+      <div class="all-clear" style="grid-column:1/-1;">
+        <div class="big-check">&#10003;</div>
+        No correlated investigations yet.
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+const MAX_ROWS = 500;
+const counts = { LOW: 0, MEDIUM: 0, HIGH: 0, CRITICAL: 0 };
+const TIER_RANK = { CRITICAL: 3, HIGH: 2, MEDIUM: 1, LOW: 0 };
+const TIER_COLOR_VAR = { LOW: '--low', MEDIUM: '--medium', HIGH: '--high', CRITICAL: '--critical' };
+
+let events = [];
+let audienceMode = 'simple';
+let sortMode = 'time';
+let tierFilter = 'ALL';
+let mitreFilter = 'ALL';
+let searchTerm = '';
+let userFilter = null;
+let nextId = 1;
+let redrawScheduled = false;
+let investigations = [];
+
+function tierColor(tier) { return `var(${TIER_COLOR_VAR[tier] || '--muted'})`; }
+function priorityClass(rank) { return rank === 1 ? 'priority-badge p1' : 'priority-badge'; }
+function renderMarkdown(text) { return text ? text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>') : text; }
+function friendlyFactor(f, technical) { return technical ? f.technical : f.plain; }
+
+function switchView(mode) {
+  document.getElementById('simple-view').style.display = mode === 'simple' ? 'grid' : 'none';
+  document.getElementById('technical-view').style.display = mode === 'technical' ? 'block' : 'none';
+  document.getElementById('investigations-view').style.display = mode === 'investigations' ? 'block' : 'none';
+}
+
+function goToUser(user) {
+  document.querySelectorAll('#audience-toggle .toggle-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === 'technical'));
+  audienceMode = 'technical'; switchView('technical');
+  userFilter = user; redraw();
+}
+
+/* ---------- SIMPLE VIEW: widget rendering (recomputed, not appended) ---------- */
+
+function renderDetail(evt) {
+  const technical = audienceMode === 'technical';
+  const factorsHtml = (evt.contributing_factors || []).map(f => `
+    <div class="factor-item">
+      <span>${renderMarkdown(friendlyFactor(f, technical))}</span>
+      ${technical ? `<span class="rule-id">${f.rule_id} +${f.points}${f.mitre_technique_id ? ' &middot; ' + f.mitre_technique_id : ''}</span>` : ''}
+    </div>
+  `).join('') || '<div class="factor-item">No risk factors triggered - this login looked normal.</div>';
+  const actionsHtml = (evt.recommended_actions && evt.recommended_actions.length)
+    ? `<ul class="action-list">${evt.recommended_actions.map(a => `<li>${renderMarkdown(a)}</li>`).join('')}</ul>`
+    : '<div class="factor-item">No action needed.</div>';
+  const mitreHtml = (evt.mitre_technique_id || []).map(m => `<span class="mitre-chip">${m}</span>`).join('');
+  const headline = technical ? (evt.technical_summary || '') : (evt.narrative || evt.plain_summary || '');
+  return `
+    <div class="detail-panel">
+      <div class="detail-section">
+        <h4>${technical ? 'Technical summary' : 'What happened'}</h4>
+        <div style="font-size:14px; line-height:1.6;">${renderMarkdown(headline)}${evt.narrative_source ? `<span class="source-tag">(${evt.narrative_source} narration)</span>` : ''}</div>
+        ${technical && mitreHtml ? `<div style="margin-top:8px;">${mitreHtml}</div>` : ''}
+      </div>
+      <div class="detail-section"><h4>${technical ? 'Contributing rules' : 'Why this was flagged'}</h4>${factorsHtml}</div>
+      <div class="detail-section"><h4>Recommended actions</h4>${actionsHtml}</div>
+    </div>`;
+}
+function openDetailInNewTab(evt, technical) {
+  const detailHtml = renderDetail({ ...evt, __forceTechnical: technical });
+  const win = window.open('', '_blank');
+  if (!win) {
+    alert('Please allow pop-ups for this site to open alert details in a new tab.');
+    return;
+  }
+
+  win.document.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <title>Alert detail - ${evt.user_id} - ${evt.risk_tier}</title>
+      <style>
+        :root {
+          --bg: #0f1117; --panel: #171a23; --panel-2: #1d212c; --border: #2a2e3a;
+          --text: #e6e8ee; --muted: #8891a5; --low: #3fb950; --medium: #d29922;
+          --high: #db6d28; --critical: #f85149; --accent: #58a6ff;
+        }
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: -apple-system, Segoe UI, Roboto, sans-serif; background: var(--bg); color: var(--text); padding: 28px; }
+        .top-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+        .top-bar h1 { font-size: 18px; margin: 0; }
+        .tier-badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-weight: 700; font-size: 12px; letter-spacing: 0.5px; }
+        .tier-LOW { background: rgba(63,185,80,0.15); color: var(--low); }
+        .tier-MEDIUM { background: rgba(210,153,34,0.15); color: var(--medium); }
+        .tier-HIGH { background: rgba(219,109,40,0.15); color: var(--high); }
+        .tier-CRITICAL { background: rgba(248,81,73,0.18); color: var(--critical); }
+        .meta-line { color: var(--muted); font-size: 13px; margin-bottom: 24px; }
+        .detail-section { margin-bottom: 20px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px; }
+        .detail-section h4 { margin: 0 0 10px 0; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); font-weight: 700; }
+        .factor-item { padding: 9px 11px; background: var(--panel-2); border-radius: 6px; margin-bottom: 7px; font-size: 13.5px; display: flex; justify-content: space-between; gap: 12px; }
+        .factor-item .rule-id { font-family: monospace; font-size: 11px; color: var(--muted); background: var(--border); padding: 1px 6px; border-radius: 4px; flex-shrink: 0; }
+        .action-list { list-style: none; padding: 0; margin: 0; counter-reset: action; }
+        .action-list li { counter-increment: action; padding: 9px 11px 9px 36px; position: relative; background: var(--panel-2); border-radius: 6px; margin-bottom: 7px; font-size: 13.5px; }
+        .action-list li::before { content: counter(action); position: absolute; left: 11px; top: 9px; width: 17px; height: 17px; border-radius: 50%; background: var(--accent); color: #0b1320; font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+        .mitre-chip { display: inline-block; font-family: monospace; font-size: 11px; background: rgba(88,166,255,0.15); color: var(--accent); padding: 2px 8px; border-radius: 10px; margin-right: 6px; }
+        .source-tag { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-left: 6px; }
+      </style>
+    </head>
+    <body>
+      <div class="top-bar">
+        <h1>${evt.user_id}</h1>
+        <span class="tier-badge tier-${evt.risk_tier}">${evt.risk_tier}</span>
+      </div>
+      <div class="meta-line">${new Date(evt.event_time).toLocaleString()} &middot; ${evt.country_code} &middot; ${evt.source_ip} &middot; score ${evt.risk_score}/100</div>
+      ${detailHtml}
+    </body>
+    </html>
+  `);
+  win.document.close();
+}
+
+function renderAttentionWidget() {
+  const urgent = events.filter(e => e.risk_tier === 'HIGH' || e.risk_tier === 'CRITICAL')
+    .sort((a, b) => b.risk_score - a.risk_score || b.receivedAt - a.receivedAt);
+
+  document.getElementById('attn-count').textContent = urgent.length;
+  const list = document.getElementById('attn-list');
+
+  if (urgent.length === 0) {
+    list.innerHTML = `<div class="all-clear"><div class="big-check">&#10003;</div>All clear &mdash; nothing needs immediate attention right now.</div>`;
+    return;
+  }
+
+  const top = urgent.slice(0, 5);
+  const topAction = e => (e.recommended_actions && e.recommended_actions[0]) || 'Review manually - no automatic recommendation available.';
+
+  list.innerHTML = top.map(e => `
+    <div class="attn-card tier-${e.risk_tier}" data-id="${e.id}">
+      <div class="attn-card-top">
+        <span class="attn-card-user">${e.user_id} <span class="tier-badge tier-${e.risk_tier}" style="margin-left:6px;">${e.risk_tier}</span></span>
+        <span class="attn-card-meta">${e.country_code} &middot; score ${e.risk_score}</span>
+      </div>
+      <div class="attn-card-summary">${renderMarkdown(e.narrative || e.plain_summary || '')}</div>
+      <div class="attn-card-action"><span class="icon">&#8594;</span><span>${renderMarkdown(topAction(e))}</span></div>
+      <div class="attn-card-detail" id="attn-detail-${e.id}" style="display:none; margin-top:12px;"></div>
+    </div>
+  `).join('') + (urgent.length > 5 ? `<div class="view-all-link" id="view-all-attn">View all ${urgent.length} &rsaquo;</div>` : '');
+
+  list.querySelectorAll('.attn-card').forEach(card => {
+    card.addEventListener('click', (evt) => {
+      if (evt.target.closest('#view-all-attn')) return;
+      const id = card.dataset.id;
+      const match = events.find(e => String(e.id) === String(id));
+      if (match) openDetailInNewTab(match, false);
+    });
+  });
+
+  const link = document.getElementById('view-all-attn');
+  if (link) link.addEventListener('click', (e) => {
+    e.stopPropagation();
+    document.querySelectorAll('#audience-toggle .toggle-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === 'technical'));
+    audienceMode = 'technical'; switchView('technical');
+    tierFilter = 'HIGH'; redraw();
+  });
+}
+
+function renderBreakdownWidget() {
+  const total = Object.values(counts).reduce((a, b) => a + b, 0);
+  const order = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
+  const pie = document.getElementById('pie-chart');
+
+  if (total === 0) {
+    pie.style.background = 'var(--panel-2)';
+    document.getElementById('breakdown-legend').innerHTML = '<span style="color:var(--muted)">No data yet.</span>';
+    return;
+  }
+
+  let cursor = 0;
+  const segments = order.map(t => {
+    const pct = counts[t] / total * 100;
+    const start = cursor;
+    cursor += pct;
+    return `${tierColor(t)} ${start}% ${cursor}%`;
+  });
+  pie.style.background = `conic-gradient(${segments.join(', ')})`;
+
+  document.getElementById('breakdown-legend').innerHTML = order.map(t => `
+    <span><span class="legend-dot" style="background:${tierColor(t)};"></span>${t}<span class="legend-count">${counts[t]}</span></span>
+  `).join('');
+}
+
+function renderWatchlistWidget() {
+  const byUser = {};
+  events.forEach(e => {
+    if (e.risk_tier === 'LOW') return;
+    if (!byUser[e.user_id]) byUser[e.user_id] = { MEDIUM: 0, HIGH: 0, CRITICAL: 0 };
+    byUser[e.user_id][e.risk_tier]++;
+  });
+  const ranked = Object.entries(byUser)
+    .map(([user, c]) => ({ user, total: c.MEDIUM + c.HIGH + c.CRITICAL, c }))
+    .filter(u => u.total > 0)
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 6);
+
+  document.getElementById('watch-count').textContent = ranked.length;
+  const el = document.getElementById('watch-list');
+  if (ranked.length === 0) {
+    el.innerHTML = `<div class="all-clear" style="padding:16px 0;">No repeat flags yet.</div>`;
+    return;
+  }
+  el.innerHTML = ranked.map(u => `
+    <div class="user-row">
+      <span class="user-row-name" data-user="${u.user}">${u.user}</span>
+      <span class="user-row-badges">
+        ${u.c.CRITICAL ? `<span class="mini-badge" style="color:var(--critical)">${u.c.CRITICAL} CRIT</span>` : ''}
+        ${u.c.HIGH ? `<span class="mini-badge" style="color:var(--high)">${u.c.HIGH} HIGH</span>` : ''}
+        ${u.c.MEDIUM ? `<span class="mini-badge">${u.c.MEDIUM} MED</span>` : ''}
+      </span>
+    </div>
+  `).join('');
+  el.querySelectorAll('.user-row-name').forEach(n => n.addEventListener('click', () => goToUser(n.dataset.user)));
+}
+
+function renderActionFreqWidget() {
+  const freq = {};
+  events.forEach(e => {
+    if (e.risk_tier === 'LOW') return;
+    (e.recommended_actions || []).forEach(a => { freq[a] = (freq[a] || 0) + 1; });
+  });
+  const ranked = Object.entries(freq).sort((a, b) => b[1] - a[1]).slice(0, 6);
+  const el = document.getElementById('action-freq-list');
+  if (ranked.length === 0) {
+    el.innerHTML = `<div class="all-clear" style="padding:16px 0;">No data yet.</div>`;
+    return;
+  }
+  el.innerHTML = ranked.map(([action, count]) => `
+    <div class="action-freq-item">
+      <span>${renderMarkdown(action)}</span>
+      <span class="action-freq-count">&times;${count}</span>
+    </div>
+  `).join('');
+}
+
+function redrawSimple() {
+  renderAttentionWidget();
+  renderBreakdownWidget();
+  renderWatchlistWidget();
+  renderActionFreqWidget();
+}
+
+
+/* ---------- INVESTIGATIONS VIEW ---------- */
+
+function renderInvestigations() {
+  const list = document.getElementById('case-list');
+  const critical = investigations.filter(c => c.priority === 'CRITICAL').length;
+  const high = investigations.filter(c => c.priority === 'HIGH').length;
+
+  document.getElementById('case-total').textContent = investigations.length;
+  document.getElementById('case-critical').textContent = critical;
+  document.getElementById('case-high').textContent = high;
+
+  if (!investigations.length) {
+    list.innerHTML = `
+      <div class="all-clear" style="grid-column:1/-1;">
+        <div class="big-check">&#10003;</div>
+        No correlated investigations yet.
+      </div>`;
+    return;
+  }
+
+  list.innerHTML = investigations.map(c => {
+    const subject = c.user_id
+      ? `User: ${c.user_id}`
+      : `Source IP: ${c.source_ip || 'unknown'}`;
+
+    const chips = (c.signals || [])
+      .map(s => `<span class="signal-chip">${s.signal_id}</span>`)
+      .join('');
+
+    const signalDetails = (c.signals || [])
+      .map(s => `
+        <div style="margin-bottom:10px;">
+          <div style="font-weight:700; font-size:12.5px;">${s.title}</div>
+          <div style="color:var(--muted); font-size:12px; margin-top:3px;">${s.description}</div>
+        </div>`)
+      .join('');
+
+    const evidence = (c.signals || [])
+      .flatMap(s => s.evidence || [])
+      .slice(0, 12)
+      .map(line => `<div>${line}</div>`)
+      .join('');
+
+    const actions = (c.recommended_actions || [])
+      .map(a => `<li>${a}</li>`)
+      .join('');
+
+    return `
+      <div class="case-card case-${c.priority}">
+        <div class="case-top">
+          <div>
+            <div class="case-id">${c.case_id}</div>
+            <div class="case-title">${subject}</div>
+          </div>
+          <div class="case-score">
+            <div class="value" style="color:${tierColor(c.priority)}">${c.correlation_score}</div>
+            <div class="label">case score</div>
+          </div>
+        </div>
+
+        <div class="case-meta">
+          ${new Date(c.started_at).toLocaleString()} &rarr; ${new Date(c.ended_at).toLocaleString()}<br>
+          ${c.event_count} related events &middot; highest event score ${c.highest_event_score}
+          &middot; <span class="tier-badge tier-${c.priority}">${c.priority}</span>
+        </div>
+
+        <div>${chips}</div>
+
+        <div class="case-section">
+          <h4>Why these events were correlated</h4>
+          ${signalDetails || '<div style="color:var(--muted);font-size:12px;">No signals available.</div>'}
+        </div>
+
+        <div class="case-section">
+          <h4>Evidence timeline</h4>
+          <div class="case-evidence">${evidence || 'No evidence available.'}</div>
+        </div>
+
+        <div class="case-section">
+          <h4>Recommended analyst actions</h4>
+          <ol class="case-action-list">${actions || '<li>Review the correlated events manually.</li>'}</ol>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+async function loadInvestigations() {
+  try {
+    const resp = await fetch('/investigations');
+    if (!resp.ok) return;
+    const data = await resp.json();
+    investigations = data.investigations || [];
+    if (audienceMode === 'investigations') renderInvestigations();
+  } catch (err) {
+    console.error('Failed to load investigations:', err);
+  }
+}
+
+/* ---------- TECHNICAL VIEW: live investigation table ---------- */
+
+function matchesFilters(evt) {
+  if (userFilter && evt.user_id !== userFilter) return false;
+  if (tierFilter !== 'ALL' && evt.risk_tier !== tierFilter) return false;
+  if (mitreFilter === 'ANY' && (!evt.mitre_technique_id || evt.mitre_technique_id.length === 0)) return false;
+  if (searchTerm) {
+    const haystack = [evt.user_id, evt.country_code, evt.source_ip, evt.narrative, evt.plain_summary, evt.technical_summary]
+      .filter(Boolean).join(' ').toLowerCase();
+    if (!haystack.includes(searchTerm)) return false;
+  }
+  return true;
+}
+
+function groupConsecutive(list) {
+  const grouped = [];
+  for (const evt of list) {
+    const last = grouped[grouped.length - 1];
+    if (last && last.head.user_id === evt.user_id && last.head.risk_tier === evt.risk_tier) last.group.push(evt);
+    else grouped.push({ head: evt, group: [evt] });
+  }
+  return grouped;
+}
+
+function renderRow(evt, repeatCount) {
+  const time = new Date(evt.event_time).toLocaleTimeString();
+  const summaryText = audienceMode === 'technical' ? (evt.technical_summary || '') : (evt.narrative || evt.plain_summary || '');
+  const repeatHtml = repeatCount > 1 ? `<span class="repeat-badge">&times;${repeatCount}</span>` : '';
+  return `
+    <tr class="event-row" data-id="${evt.id}">
+      <td><span class="${priorityClass(evt.priorityRank)}">${evt.priorityRank}</span></td>
+      <td>${time}</td>
+      <td><a class="user-link" data-user="${evt.user_id}">${evt.user_id}</a>${repeatHtml}</td>
+      <td>${evt.country_code}</td>
+      <td>
+        <span class="score-bar-bg"><span class="score-bar-fill" style="width:${evt.risk_score}%; background:${tierColor(evt.risk_tier)}"></span></span>
+        ${evt.risk_score} <span class="tier-badge tier-${evt.risk_tier}">${evt.risk_tier}</span>
+      </td>
+      <td class="summary-cell">${renderMarkdown(summaryText)}</td>
+    </tr>
+    <tr class="detail-row" data-id="${evt.id}" style="display:none;"><td colspan="6">${renderDetail(evt)}</td></tr>`;
+}
+
+function computeOrder(filtered) {
+  const ordered = [...filtered].sort((a, b) => {
+    if (sortMode === 'priority') {
+      if (b.risk_score !== a.risk_score) return b.risk_score - a.risk_score;
+      const af = (a.contributing_factors || []).length, bf = (b.contributing_factors || []).length;
+      if (bf !== af) return bf - af;
+      return TIER_RANK[b.risk_tier] - TIER_RANK[a.risk_tier];
+    }
+    return b.receivedAt - a.receivedAt;
+  });
+  ordered.forEach((e, i) => { e.priorityRank = i + 1; });
+  return ordered;
+}
+
+function redrawTechnical() {
+  const body = document.getElementById('feed-body');
+  const filtered = events.filter(matchesFilters);
+  const ordered = computeOrder(filtered);
+  const grouped = groupConsecutive(ordered);
+
+  document.getElementById('result-count').textContent =
+    filtered.length === events.length ? `${events.length} events` : `${filtered.length} of ${events.length} events`;
+  document.querySelectorAll('.stat-card').forEach(c => c.classList.toggle('active-filter', c.dataset.tierFilter === tierFilter));
+
+  if (grouped.length === 0) {
+    document.getElementById('empty-state').style.display = 'block';
+    document.getElementById('empty-state').textContent = events.length === 0
+      ? 'Waiting for events... run python3 event_simulator.py to generate live traffic.'
+      : 'No events match the current filters.';
+    body.innerHTML = ''; return;
+  }
+  document.getElementById('empty-state').style.display = 'none';
+  body.innerHTML = grouped.map(g => renderRow(g.head, g.group.length)).join('');
+
+  body.querySelectorAll('tr.event-row').forEach(row => {
+    row.addEventListener('click', (e) => {
+      if (e.target.closest('.user-link')) return;
+      const id = row.dataset.id;
+      const match = events.find(ev => String(ev.id) === String(id));
+      if (match) openDetailInNewTab(match, audienceMode === 'technical');
+    });
+  });
+  body.querySelectorAll('.user-link').forEach(link => {
+    link.addEventListener('click', (e) => {
+      e.stopPropagation();
+      userFilter = userFilter === link.dataset.user ? null : link.dataset.user;
+      redraw();
+    });
+  });
+}
+
+function redraw() {
+  if (audienceMode === 'simple') redrawSimple();
+  else if (audienceMode === 'technical') redrawTechnical();
+  else renderInvestigations();
+}
+
+function scheduleRedraw() {
+  if (redrawScheduled) return;
+  redrawScheduled = true;
+  setTimeout(() => { redrawScheduled = false; redraw(); }, 250);
+}
+
+function addEvent(msg) {
+  msg.id = nextId++;
+  msg.receivedAt = Date.now();
+  events.unshift(msg);
+  if (events.length > MAX_ROWS) events.pop();
+
+  counts[msg.risk_tier] = (counts[msg.risk_tier] || 0) + 1;
+  document.getElementById('stat-total').textContent = Object.values(counts).reduce((a,b) => a+b, 0);
+  document.getElementById('stat-low').textContent = counts.LOW;
+  document.getElementById('stat-medium').textContent = counts.MEDIUM;
+  document.getElementById('stat-high').textContent = counts.HIGH;
+  document.getElementById('stat-critical').textContent = counts.CRITICAL;
+
+  scheduleRedraw();
+}
+
+/* ---------- Ask AI ---------- */
+
+function buildAskContext() {
+  const total = Object.values(counts).reduce((a, b) => a + b, 0);
+  const urgent = events.filter(e => e.risk_tier === 'HIGH' || e.risk_tier === 'CRITICAL').slice(0, 8);
+
+  const byUser = {};
+  events.forEach(e => {
+    if (e.risk_tier === 'LOW') return;
+    byUser[e.user_id] = (byUser[e.user_id] || 0) + 1;
+  });
+  const topUsers = Object.entries(byUser).sort((a, b) => b[1] - a[1]).slice(0, 5)
+    .map(([u, c]) => `${u} (${c} flagged events)`).join(', ') || 'none';
+
+  const lines = [
+    `Total events scored: ${total}`,
+    `Breakdown: ${counts.LOW} LOW, ${counts.MEDIUM} MEDIUM, ${counts.HIGH} HIGH, ${counts.CRITICAL} CRITICAL`,
+    `Users with the most flagged (non-LOW) events: ${topUsers}`,
+    `Currently visible high/critical alerts (most recent ${urgent.length}):`,
+  ];
+  urgent.forEach(e => {
+    lines.push(`- User ${e.user_id}, ${e.country_code}, score ${e.risk_score}/${e.risk_tier}: ${(e.plain_summary || '').replace(/\n/g, ' ')}`);
+  });
+  return lines.join('\n');
+}
+
+async function submitAskQuestion() {
+  const input = document.getElementById('ask-input');
+  const answerBox = document.getElementById('ask-answer');
+  const question = input.value.trim();
+  if (!question) return;
+
+  answerBox.textContent = 'Thinking...';
+  answerBox.style.color = 'var(--muted)';
+
+  try {
+    const resp = await fetch('/ask', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question, context: buildAskContext() }),
+    });
+    const data = await resp.json();
+    answerBox.innerHTML = renderMarkdown(data.answer);
+    answerBox.style.color = data.source === 'groq' ? 'var(--text)' : 'var(--muted)';
+  } catch (err) {
+    answerBox.textContent = 'Something went wrong reaching the AI service.';
+  }
+}
+
+/* ---------- Event listeners ---------- */
+
+document.getElementById('audience-toggle').addEventListener('click', (e) => {
+  const btn = e.target.closest('.toggle-btn'); if (!btn) return;
+  document.querySelectorAll('#audience-toggle .toggle-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active'); audienceMode = btn.dataset.mode;
+  switchView(audienceMode); redraw();
+});
+document.getElementById('th-score')?.addEventListener('click', () => {
+  sortMode = sortMode === 'priority' ? 'time' : 'priority'; redraw();
+});
+document.querySelectorAll('.stat-card').forEach(card => {
+  card.addEventListener('click', () => {
+    tierFilter = card.dataset.tierFilter;
+    if (audienceMode === 'simple') {
+      document.querySelectorAll('#audience-toggle .toggle-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === 'technical'));
+      audienceMode = 'technical'; switchView('technical');
+    }
+    redraw();
+  });
+});
+document.getElementById('search-box')?.addEventListener('input', (e) => { searchTerm = e.target.value.trim().toLowerCase(); redraw(); });
+document.getElementById('clear-filters')?.addEventListener('click', () => {
+  tierFilter = 'ALL'; mitreFilter = 'ALL'; searchTerm = ''; userFilter = null;
+  document.getElementById('search-box').value = '';
+  document.querySelectorAll('.filter-chip').forEach(c => c.classList.toggle('active', c.dataset.mitreFilter === 'ALL'));
+  redraw();
+});
+document.querySelectorAll('.filter-chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+    chip.classList.add('active'); mitreFilter = chip.dataset.mitreFilter; redraw();
+  });
+});
+document.getElementById('ask-submit')?.addEventListener('click', submitAskQuestion);
+document.getElementById('ask-input')?.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') submitAskQuestion();
+});
+
+function connect() {
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+  ws.onopen = () => { document.getElementById('status-dot').className = 'dot connected'; document.getElementById('status-text').textContent = 'Connected'; };
+  ws.onclose = () => { document.getElementById('status-dot').className = 'dot disconnected'; document.getElementById('status-text').textContent = 'Disconnected - retrying...'; setTimeout(connect, 2000); };
+  ws.onerror = () => ws.close();
+  ws.onmessage = (event) => {
+    const msg = JSON.parse(event.data);
+
+    if (msg.type === 'score') {
+      addEvent(msg);
+    } else if (msg.type === 'investigations') {
+      investigations = msg.investigations || [];
+      if (audienceMode === 'investigations') renderInvestigations();
+    }
+  };
+  setInterval(() => { if (ws.readyState === WebSocket.OPEN) ws.send('ping'); }, 20000);
+}
+
+switchView('simple');
+redraw();
+loadInvestigations();
+connect();
+</script>
+
+</body>
+</html>
